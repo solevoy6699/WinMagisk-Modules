@@ -1,0 +1,60 @@
+name: Build modules.json
+
+on:
+  push:
+    paths:
+      - 'modules/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate modules.json
+        run: |
+          python3 - <<'EOF'
+          import os, json
+
+          modules = []
+          base = "modules"
+
+          for mod_id in sorted(os.listdir(base)):
+              mod_path = os.path.join(base, mod_id)
+              if not os.path.isdir(mod_path):
+                  continue
+
+              manifest_path = os.path.join(mod_path, "module.json")
+              if not os.path.exists(manifest_path):
+                  print(f"Skipping {mod_id}: no module.json")
+                  continue
+
+              with open(manifest_path, "r", encoding="utf-8") as f:
+                  manifest = json.load(f)
+
+              files = os.listdir(mod_path)
+
+              modules.append({
+                  "id": mod_id,
+                  "name": manifest.get("name", mod_id),
+                  "description": manifest.get("description", ""),
+                  "version": manifest.get("version", "1.0"),
+                  "author": manifest.get("author", "unknown"),
+                  "folder": f"modules/{mod_id}",
+                  "files": files,
+              })
+
+          with open("modules.json", "w", encoding="utf-8") as f:
+              json.dump(modules, f, ensure_ascii=False, indent=2)
+
+          print(f"Built modules.json with {len(modules)} modules")
+          EOF
+
+      - name: Commit modules.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add modules.json
+          git diff --cached --quiet || git commit -m "chore: rebuild modules.json"
+          git push
